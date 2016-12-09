@@ -6,6 +6,7 @@ import java.io.Serializable;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import ru.babobka.nodeserials.NodeRequest;
 import ru.babobka.subtask.model.RequestDistributor;
@@ -15,20 +16,20 @@ import ru.babobka.subtask.model.RequestDistributor;
  */
 public class EllipticFactorDistributor implements RequestDistributor {
 
-	private static final String URI = "ellipticFactor";
+	private static final String TASK_NAME = "Elliptic curve factor";
 
 	private static final String NUMBER = "number";
 
 	@Override
 	public NodeRequest[] distribute(Map<String, String> addition,
-			int nodes, long id) {
+			int nodes, UUID id) {
 		BigInteger n = new BigInteger(addition.get(NUMBER));
 		NodeRequest[] requests = new NodeRequest[nodes];
 		Map<String, Serializable> innerAdditionMap = new HashMap<>();
 		innerAdditionMap.put(NUMBER, n);
 		for (int i = 0; i < requests.length; i++) {	
 			requests[i] = new NodeRequest(id,
-					(int) (Math.random() * Integer.MAX_VALUE), URI,
+					UUID.randomUUID(), TASK_NAME,
 					innerAdditionMap, false, true);
 		}
 		return requests;

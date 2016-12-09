@@ -8,9 +8,12 @@ import java.math.BigInteger;
  */
 public class MathUtil {
 
-	public static BigDecimal THREE_D = BigDecimal.valueOf(3);
+	private static final BigDecimal THREE_D = BigDecimal.valueOf(3);
 
-	public static int UP = BigDecimal.ROUND_HALF_UP;
+	private static final int UP = BigDecimal.ROUND_HALF_UP;
+
+	private MathUtil() {
+	}
 
 	// other statements
 
@@ -36,6 +39,15 @@ public class MathUtil {
 
 	public static long log(long stage, long number) {
 		return (long) (Math.log(number) / Math.log(stage));
+	}
+
+	public static boolean isPrime(BigInteger a) {
+		if (a.bitLength() < 50) {
+			return isPrime(a.longValue());
+		} else {
+			return a.isProbablePrime(50);
+		}
+
 	}
 
 	public static boolean isPrime(long a) {
@@ -86,8 +98,6 @@ public class MathUtil {
 		return booleans;
 	}
 
-	
-	
 	public static long dummyFactor(long n) {
 		if (n < 0) {
 			throw new IllegalArgumentException();

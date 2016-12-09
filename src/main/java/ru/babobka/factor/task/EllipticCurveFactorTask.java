@@ -4,9 +4,8 @@ import ru.babobka.factor.model.EllipticCurveProjective;
 import ru.babobka.factor.model.EllipticFactorDistributor;
 import ru.babobka.factor.model.EllipticFactorReducer;
 import ru.babobka.factor.model.FactoringResult;
-import ru.babobka.factor.runnable.EllipticCurveProjectiveFactorRunnable;
+import ru.babobka.factor.runnable.EllipticCurveProjectiveFactorCallable;
 import ru.babobka.factor.util.MathUtil;
-import ru.babobka.factor.util.ThreadUtil;
 import ru.babobka.nodeserials.NodeRequest;
 import ru.babobka.subtask.model.ExecutionResult;
 import ru.babobka.subtask.model.Reducer;
@@ -16,16 +15,21 @@ import ru.babobka.subtask.model.ValidationResult;
 
 import java.io.Serializable;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Created by dolgopolov.a on 08.12.15.
  */
 public class EllipticCurveFactorTask implements SubTask {
 
-	private volatile AtomicReferenceArray<Thread> localThreads;
+	private volatile ExecutorService threadPool;
 
 	public static final String NUMBER = "number";
 
@@ -47,16 +51,23 @@ public class EllipticCurveFactorTask implements SubTask {
 
 	@Override
 	public ExecutionResult execute(NodeRequest request) {
-		if (!stopped) {
 
+		try {
 			Map<String, Serializable> result = new HashMap<>();
-			BigInteger number = (BigInteger) request.getAddition().get(NUMBER);
+			BigInteger number = new BigInteger(request.getStringAdditionValue(NUMBER));
 			FactoringResult factoringResult;
-			if (isRequestDataTooSmall(request.getAddition())) {
+
+			if (isRequestDataTooSmall(request)) {
 				factoringResult = new FactoringResult(BigInteger.valueOf(MathUtil.dummyFactor(number.longValue())),
 						EllipticCurveProjective.dummyCurve());
 			} else {
-				factoringResult = ellipticFactorParallel(number, Runtime.getRuntime().availableProcessors());
+				synchronized (this) {
+					if (!stopped) {
+						threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+					}
+				}
+				factoringResult = ellipticFactorParallel(threadPool, number,
+						Runtime.getRuntime().availableProcessors());
 			}
 			if (factoringResult != null) {
 				result.put(NUMBER, number);
@@ -67,15 +78,20 @@ public class EllipticCurveFactorTask implements SubTask {
 				result.put(B, factoringResult.getEllipticCurveProjective().getB());
 				return new ExecutionResult(stopped, result);
 			}
-
+			return new ExecutionResult(stopped, null);
+		} finally {
+			if (threadPool != null) {
+				threadPool.shutdown();
+			}
 		}
-		return new ExecutionResult(stopped, null);
 	}
 
 	@Override
-	public void stopTask() {
+	public synchronized void stopTask() {
 		stopped = true;
-		ThreadUtil.interruptBatch(localThreads);
+		if (threadPool != null) {
+			threadPool.shutdownNow();
+		}
 	}
 
 	@Override
@@ -84,10 +100,11 @@ public class EllipticCurveFactorTask implements SubTask {
 			return new ValidationResult("Empty request", false);
 		} else {
 			try {
-				BigInteger n = (BigInteger) request.getAddition().get(NUMBER);
-				if (isRequestDataTooSmall(request.getAddition()) && MathUtil.isPrime(n.longValue())) {
-					return new ValidationResult("number is not composite", false);
-				} else if (n.isProbablePrime(50)) {
+
+				BigInteger number = new BigInteger(request.getStringAdditionValue(NUMBER));
+				if (number.compareTo(BigInteger.valueOf(3)) <= 0) {
+					return new ValidationResult("number must be greater than 3", false);
+				} else if (MathUtil.isPrime(number)) {
 					return new ValidationResult("number is not composite", false);
 				}
 
@@ -98,28 +115,32 @@ public class EllipticCurveFactorTask implements SubTask {
 		return new ValidationResult(true);
 	}
 
-	public FactoringResult ellipticFactorParallel(BigInteger n, int cores) {
+	private FactoringResult ellipticFactorParallel(ExecutorService threadPool, BigInteger n, int cores) {
+		if (threadPool != null) {
+			List<Future<FactoringResult>> futures = new ArrayList<>();
+			for (int i = 0; i < cores; i++) {
+				futures.add(threadPool.submit(new EllipticCurveProjectiveFactorCallable(threadPool, n)));
 
-		localThreads = new AtomicReferenceArray<>(cores);
-		AtomicReferenceArray<FactoringResult> resultArray = new AtomicReferenceArray<>(cores);
-		for (int i = 0; i < localThreads.length(); i++) {
-			localThreads.set(i, new Thread(new EllipticCurveProjectiveFactorRunnable(resultArray, localThreads, i, n)));
-			localThreads.get(i).start();
-		}
-		for (int i = 0; i < localThreads.length(); i++) {
-			try {
-				localThreads.get(i).join();
-			} catch (InterruptedException e) {
-				localThreads.get(i).interrupt();
-				e.printStackTrace();
 			}
-		}
-		for (int i = 0; i < resultArray.length(); i++) {
-			if (resultArray.get(i) != null) {
-				return resultArray.get(i);
+			for (Future<FactoringResult> future : futures) {
+				FactoringResult result;
+				try {
+					result = future.get();
+					if (result != null) {
+						return result;
+					}
+				} catch (InterruptedException | ExecutionException e) {
+					if (!stopped) {
+						e.printStackTrace();
+					}
+					continue;
+				}
+
 			}
+
 		}
 		return null;
+
 	}
 
 	@Override
@@ -133,15 +154,20 @@ public class EllipticCurveFactorTask implements SubTask {
 	}
 
 	@Override
-	public boolean isRequestDataTooSmall(Map<String, Serializable> addition) {
-		BigInteger number = (BigInteger) addition.get(NUMBER);
+	public boolean isRequestDataTooSmall(NodeRequest request) {
+		BigInteger number = new BigInteger(request.getStringAdditionValue(NUMBER));
 		return number.bitLength() < 50;
 	}
 
 	@Override
 	public SubTask newInstance() {
-
 		return new EllipticCurveFactorTask();
+	}
+
+	@Override
+	public boolean isStopped() {
+
+		return stopped;
 	}
 
 }

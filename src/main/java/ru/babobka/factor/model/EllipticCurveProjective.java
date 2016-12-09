@@ -9,7 +9,7 @@ import java.util.Random;
 /**
  * Created by dolgopolov.a on 17.11.15.
  */
-public class EllipticCurveProjective implements Cloneable {
+public class EllipticCurveProjective {
 
 	public static final BigInteger TWO = BigInteger.valueOf(2);
 

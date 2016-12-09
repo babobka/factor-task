@@ -1,11 +1,9 @@
 package ru.babobka.factor.model;
 
-
 import ru.babobka.factor.task.EllipticCurveFactorTask;
 import ru.babobka.nodeserials.NodeResponse;
 import ru.babobka.subtask.exception.ReducingException;
 import ru.babobka.subtask.model.Reducer;
-
 
 import java.io.Serializable;
 import java.math.BigInteger;
@@ -19,8 +17,7 @@ import java.util.Map;
 public class EllipticFactorReducer implements Reducer {
 
 	@Override
-	public Map<String, Serializable> reduce(
-			List<NodeResponse> responses) throws ReducingException {
+	public Map<String, Serializable> reduce(List<NodeResponse> responses) throws ReducingException {
 		try {
 			for (NodeResponse response : responses) {
 				if (isValidResponse(response)) {
@@ -36,16 +33,11 @@ public class EllipticFactorReducer implements Reducer {
 	@Override
 	public boolean isValidResponse(NodeResponse response) {
 		try {
-			if (response != null
-					&& response.getStatus() == NodeResponse.Status.NORMAL
-					&& response.getAddition() != null) {
-				BigInteger factor = (BigInteger) response.getAddition().get(
-						EllipticCurveFactorTask.FACTOR);
-				BigInteger n = (BigInteger) response.getAddition().get(
-						EllipticCurveFactorTask.NUMBER);
-				if (!factor.equals(BigInteger.ONE.negate())) {
+			if (response != null && response.getStatus() == NodeResponse.Status.NORMAL) {
+				BigInteger factor = response.getAdditionValue(EllipticCurveFactorTask.FACTOR);
+				BigInteger n = response.getAdditionValue(EllipticCurveFactorTask.NUMBER);
+				if (factor != null && n != null && !factor.equals(BigInteger.ONE.negate())) {
 					if (n.mod(factor).equals(BigInteger.ZERO)) {
-
 						return true;
 					}
 
