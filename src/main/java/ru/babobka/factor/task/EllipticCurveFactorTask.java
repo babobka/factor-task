@@ -62,7 +62,7 @@ public class EllipticCurveFactorTask implements SubTask {
 						EllipticCurveProjective.dummyCurve());
 			} else {
 				synchronized (this) {
-					if (!stopped) {
+					if (!stopped && threadPool == null) {
 						threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 					}
 				}
